@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"encoding/base64"
 	"log"
 	"os"
 
@@ -14,10 +15,24 @@ var svc *dynamodb.DynamoDB
 
 func GetSVC() *dynamodb.DynamoDB {
 	if svc == nil {
-		// Create a new AWS session with the region and credentials from environment variables
+		// Decode base64 encoded AWS access key ID and secret access key
+		encodedAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+		encodedSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+
+		accessKeyID, err := base64.StdEncoding.DecodeString(encodedAccessKeyID)
+		if err != nil {
+			log.Fatalf("Failed to decode AWS access key ID: %v", err)
+		}
+
+		secretAccessKey, err := base64.StdEncoding.DecodeString(encodedSecretAccessKey)
+		if err != nil {
+			log.Fatalf("Failed to decode AWS secret access key: %v", err)
+		}
+
+		// Create a new AWS session with the region and decoded credentials
 		sess, err := session.NewSession(&aws.Config{
 			Region:      aws.String(os.Getenv("AWS_REGION")),
-			Credentials: credentials.NewStaticCredentials(os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"), ""),
+			Credentials: credentials.NewStaticCredentials(string(accessKeyID), string(secretAccessKey), ""),
 		})
 		if err != nil {
 			log.Fatalf("Failed to create AWS session: %v", err)

@@ -9,7 +9,6 @@ import (
 
 	"github.com/NisalSP9/To-Do-Web/connection"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
@@ -194,12 +193,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Auth(token string) (uuid.UUID, error) {
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
 
 	// Create DynamoDB client
-	svc := dynamodb.New(sess)
+	svc := connection.GetSVC()
 
 	indexName := "apiKey-index" // Replace with your GSI name
 
