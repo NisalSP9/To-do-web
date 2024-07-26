@@ -2,6 +2,7 @@ package task
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sync"
@@ -179,7 +180,10 @@ func (h *Handler) GetTasksByUserID(w http.ResponseWriter, r *http.Request) {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			http.Error(w, "Failed to fetch tasks", http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			if err := json.NewEncoder(w).Encode("Failed to fetch tasks"); err != nil {
+				log.Println("Task ", "GetTasksByUserID ", err.Error())
+			}
 			return
 		}
 	default:
@@ -193,7 +197,6 @@ func (h *Handler) GetTasksByUserID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) EditTaskDetails(w http.ResponseWriter, r *http.Request) {
-
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	task := Task{}
@@ -205,6 +208,17 @@ func (h *Handler) EditTaskDetails(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(err.Error()); err != nil {
 			log.Println("Task ", "Create Task ", err.Error())
+		}
+		return
+	}
+
+	_, err = isTaskExist(task.TaskID, task.UserID)
+
+	if err != nil {
+		log.Printf("Got error calling Delete task: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode("Error finding task"); err != nil {
+			log.Println("Task ", "DeleteTask ", err.Error())
 		}
 		return
 	}
@@ -237,7 +251,12 @@ func (h *Handler) EditTaskDetails(w http.ResponseWriter, r *http.Request) {
 
 	_, err = svc.UpdateItem(input)
 	if err != nil {
-		log.Println("failed to update task: %w", err)
+		log.Println("Failed to update task: %w", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode("Failed to update task"); err != nil {
+			log.Println("Task ", "EditTaskDetails ", err.Error())
+		}
+		return
 	}
 
 	// Update cache
@@ -247,9 +266,8 @@ func (h *Handler) EditTaskDetails(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode("Updated !!!"); err != nil {
-		log.Println("Task ", "GetTasksByUserID ", err.Error())
+		log.Println("Task ", "EditTaskDetails ", err.Error())
 	}
-
 }
 
 func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
@@ -260,13 +278,32 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 
 	taskID, err := uuid.Parse(taskIDStr)
 	if err != nil {
-		http.Error(w, "invalid taskID", http.StatusBadRequest)
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode("invalid taskID"); err != nil {
+			log.Println("Task ", "DeleteTask ", err.Error())
+		}
 		return
 	}
 
 	userID, err := middleware.GetAuthUserID(r)
 	if err != nil {
-		log.Fatalf("Got error getting user id : %s", err)
+		log.Printf("Got error getting user id : %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode("Got error getting user id"); err != nil {
+			log.Println("Task ", "DeleteTask ", err.Error())
+		}
+		return
+	}
+
+	_, err = isTaskExist(taskID, userID)
+
+	if err != nil {
+		log.Printf("Got error calling Delete task: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode("Error finding task"); err != nil {
+			log.Println("Task ", "DeleteTask ", err.Error())
+		}
+		return
 	}
 
 	svc := connection.GetSVC()
@@ -282,7 +319,10 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	_, err = svc.DeleteItem(input)
 	if err != nil {
 		log.Printf("Got error calling Delete task: %s", err)
-		http.Error(w, "Failed to delete task", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode("Failed to delete task"); err != nil {
+			log.Println("Task ", "DeleteTask ", err.Error())
+		}
 		return
 	}
 
@@ -295,4 +335,29 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode("Deleted !!!"); err != nil {
 		log.Println("Task ", "DeleteTask ", err.Error())
 	}
+}
+
+func isTaskExist(taskID, userID uuid.UUID) (bool, error) {
+
+	svc := connection.GetSVC()
+	// Check if the task exists
+	getInput := &dynamodb.GetItemInput{
+		TableName: aws.String(TABLE_NAME),
+		Key: map[string]*dynamodb.AttributeValue{
+			"taskID": {B: taskID[:]},
+			"userID": {B: userID[:]},
+		},
+	}
+
+	result, err := svc.GetItem(getInput)
+	if err != nil {
+		log.Println("Failed to get task: %w", err)
+		return false, err
+	}
+
+	if result.Item == nil {
+		log.Println("Task not found")
+		return false, errors.New("Task not found")
+	}
+	return true, nil
 }

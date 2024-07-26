@@ -42,9 +42,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(params.Username) <= 1 || len(params.Password) <= 1 {
+	if len(params.Username) <= 5 || len(params.Password) <= 5 {
 		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode("Too short username or password !!!"); err != nil {
+		if err := json.NewEncoder(w).Encode("Too short username or password, use at least 6 characters !!!"); err != nil {
 			log.Println("User ", "Create User ", err.Error())
 		}
 		return
@@ -73,7 +73,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	if *queryResult.Count > 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode("Username already taken !!!"); err != nil {
+		if err := json.NewEncoder(w).Encode("Username already exist !!!"); err != nil {
 			log.Println("User ", "Create User ", err.Error())
 		}
 		return
